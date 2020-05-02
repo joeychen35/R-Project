@@ -75,6 +75,7 @@ table(movie_metadata$content_rating)
 
 # Now lets look the rest
 colSums(sapply(movie_metadata, is.na)) 
+
 # replace NA with column average for facenumber_in_poster
 movie_metadata$facenumber_in_poster[is.na(movie_metadata$facenumber_in_poster)] <- round(mean(movie_metadata$facenumber_in_poster, na.rm = TRUE))
 # convert 0s into NAs for other predictors
