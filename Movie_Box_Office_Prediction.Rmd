@@ -516,8 +516,6 @@ confusionMatrix(as.factor(ifelse(logistic_reg_pred > 0.5 ,1, 0)), as.factor(vali
 ```
 Logistic regression Accuracy = 0.718
 
-#https://blogs.uoregon.edu/rclub/2016/04/05/plotting-your-logistic-regression-models/
-
 
 ```{r}
 logistic_reg <- glm(profitable ~. - gross - gross_catogorical - facenumber_in_poster - content_rating - aspect_ratio -movie_facebook_likes - Action -Adventure -Animation -Biography -History - Mystery - Sport - Thriller - War - Western - actor_1_facebook_likes - actor_2_facebook_likes - cast_total_facebook_likes - actor_3_facebook_likes - num_user_for_reviews - duration - Musical, data = train.df.logistic[-c(647,2817),], family = "binomial")
