@@ -27,6 +27,7 @@ weather_train1 <- weather_train %>% filter(weather_train$site_id == 4)
 weather_train1$timestamp <- as.Date(weather_train1$timestamp)
 weather <- weather_train1 %>% group_by(timestamp = weather_train1$timestamp) %>% summarise(avg_temp = avg_temp <- mean(air_temperature,na.rm = TRUE),avg_cloud = avg_cloud <- mean(cloud_coverage,na.rm = TRUE),avg_dewtemp = avg_dewtemp <- mean(dew_temperature,na.rm = TRUE),avg_sea = avg_sea <- mean(sea_level_pressure,na.rm = TRUE),avg_wind = avg_wind <- mean(wind_speed,na.rm = TRUE))
 
+
 ```
 
 ```{r}
