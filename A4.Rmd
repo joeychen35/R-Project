@@ -1,0 +1,386 @@
+---
+title: "Project Assignment 4: Clustering"
+author: "XINYI LIU, Zhijiao Chen, Po Chiao Chen, Yi Chen"
+date: "3/02/2020"
+output:
+  html_document: default
+  word_document: default
+---
+```{r, warning=FALSE}
+library(dplyr)
+library(tidyverse)
+library(forecast)
+library(leaps)
+library(forecast)
+library(caret)
+library(car)
+library(data.table)
+```
+
+
+```{r}
+weather_train <- read.csv("weather_train.csv")
+building_metadata <- read.csv("building_metadata.csv")
+train <- fread("train.csv")
+
+weather_train1 <- weather_train %>% filter(weather_train$site_id == 4)
+weather_train1$timestamp <- as.Date(weather_train1$timestamp)
+weather <- weather_train1 %>% group_by(timestamp = weather_train1$timestamp) %>% summarise(avg_temp = avg_temp <- mean(air_temperature,na.rm = TRUE),avg_cloud = avg_cloud <- mean(cloud_coverage,na.rm = TRUE),avg_dewtemp = avg_dewtemp <- mean(dew_temperature,na.rm = TRUE),avg_sea = avg_sea <- mean(sea_level_pressure,na.rm = TRUE),avg_wind = avg_wind <- mean(wind_speed,na.rm = TRUE))
+
+```
+
+```{r}
+building <- dplyr::inner_join(building_metadata,train,by="building_id")
+building <- building %>% filter(building$site_id == 4)
+building$timestamp <- as.Date(building$timestamp)
+building_group <- building %>% group_by(building_id = building$building_id, timestamp = building$timestamp) %>%
+  summarise(avg_meter_reading = avg_meter_reading <- mean(meter_reading,na.rm=TRUE), meter = meter <- mean(meter)) 
+
+#building_filter_site4 <- building_metadata %>% filter(building_metadata$site_id == 4)
+building_final <- dplyr::inner_join(building_group, building_metadata,by="building_id")
+final_df <- dplyr::inner_join(weather,building_final,by="timestamp")
+
+#unique(final_df$meter)
+#hist(train$meter)
+#sum(is.na(final_df))
+``` 
+
+```{r}
+final_df['age']=2016-final_df$year_built
+final_df <- final_df[,-13]
+```
+
+# Omiting NA
+```{r}
+final_df <- na.omit(final_df)
+```
+
+# Normalize data 
+```{r, fig.height= 10}
+par(mfrow = c(2, 3))
+final_df_normalize <- final_df %>% mutate(
+                    avg_temp = scale(final_df$avg_temp), 
+                    avg_cloud = scale(final_df$avg_cloud), 
+                    avg_dewtemp = scale(final_df$avg_dewtemp),
+                    avg_sea = scale(final_df$avg_sea),
+                    avg_wind = scale(final_df$avg_wind),
+                    avg_meter_reading = scale(final_df$avg_meter_reading),
+                    square_feet = scale(final_df$square_feet),
+                    floor_count = scale(final_df$floor_count),
+                    age = scale(final_df$age)
+                    )
+hist(final_df_normalize$avg_temp, density = 20, breaks = 20, prob = TRUE, main = "Avg Temp Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df_normalize$avg_cloud, density = 20, breaks = 20, prob = TRUE, main = "Avg Cloud Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df_normalize$avg_dewtemp, density = 20, breaks = 20, prob = TRUE, main = "Avg Dewtemp Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df_normalize$avg_sea, density = 20, breaks = 20, prob = TRUE, main = "Avg Sea Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df_normalize$avg_wind, density = 20, breaks = 20, prob = TRUE, main = "Avg Wind Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df_normalize$avg_meter_reading, density = 20, breaks = 20, prob = TRUE, main = "Avg Meter Reading Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df_normalize$square_feet, density = 20, breaks = 20, prob = TRUE, main = "Avg Square Feet Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df_normalize$floor_count, density = 20, breaks = 20, prob = TRUE, main = "Avg Floor Count Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df_normalize$age, density = 20, breaks = 20, prob = TRUE, main = "Avg Building Age Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+
+hist(final_df$meter, prob = TRUE, main = "Meter Type Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+
+hist(as.numeric(final_df$primary_use), density = 20, breaks = 20, prob = TRUE,main = "Avg Primary Use Histogram", cex.main =3, cex.axis = 2.5, cex.lab = 2)
+curve(dnorm, add = TRUE, col = "black", lwd = 5)
+```
+
+### 1. Show descriptive statistics for relevant and important variables, particularly for your target variable and all your model’s candidate predictor variables.
+box-and-whisker plots for relevant and important variables
+```{r,fig.width=7,fig.height=7}
+
+par(mfrow=c(1,6))
+boxplot(final_df$avg_temp,main="Temperature")
+boxplot(final_df$avg_cloud,main="Cloud Coverage")
+boxplot(final_df$avg_dewtemp,main="Dew Temperature")
+boxplot(final_df$avg_sea,main="Sea Level")
+boxplot(final_df$avg_wind,main="Wind Speed")
+boxplot(final_df$avg_meter_reading,main="Meter Reading")
+boxplot(final_df$meter,main="Meter Type")
+boxplot(as.numeric(final_df$primary_use),main="Building Type")
+boxplot(final_df$square_feet,main="Building Square feet")
+boxplot(final_df$floor_count,main="Building Floor")
+boxplot(final_df$age,main="Busilding Age")
+
+```
+
+The minimum, maximum, and average (mean, median, mode) and standard deviation / variance of important variables. 
+```{r}
+library(kableExtra)
+Minimum <-c(min(final_df$avg_temp),min(final_df$avg_cloud),min(final_df$avg_dewtemp),
+            min(final_df$avg_sea),min(final_df$avg_wind),min(final_df$avg_meter_reading),
+            min(final_df$meter),min(as.numeric(final_df$primary_use)), min(final_df$square_feet), 
+            min(final_df$floor_count), min(final_df$age))
+
+Maximum <- c(max(final_df$avg_temp),max(final_df$avg_cloud),max(final_df$avg_dewtemp),
+            max(final_df$avg_sea),max(final_df$avg_wind),max(final_df$avg_meter_reading),
+            max(final_df$meter),max(as.numeric(final_df$primary_use)), max(final_df$square_feet), 
+            max(final_df$floor_count), max(final_df$age))
+
+
+Mean <-c(mean(final_df$avg_temp),mean(final_df$avg_cloud),mean(final_df$avg_dewtemp),
+            mean(final_df$avg_sea),mean(final_df$avg_wind),mean(final_df$avg_meter_reading),
+            mean(final_df$meter),mean(as.numeric(final_df$primary_use)), mean(final_df$square_feet), 
+            mean(final_df$floor_count), mean(final_df$age))
+
+Median <- c(median(final_df$avg_temp),median(final_df$avg_cloud),median(final_df$avg_dewtemp),
+            median(final_df$avg_sea),median(final_df$avg_wind),median(final_df$avg_meter_reading),
+            median(final_df$meter),median(as.numeric(final_df$primary_use)), median(final_df$square_feet), 
+            median(final_df$floor_count), median(final_df$age))
+
+Sd <- c(sd(final_df$avg_temp),sd(final_df$avg_cloud),sd(final_df$avg_dewtemp),
+            sd(final_df$avg_sea),sd(final_df$avg_wind),sd(final_df$avg_meter_reading),
+            sd(final_df$meter),sd(as.numeric(final_df$primary_use)), sd(final_df$square_feet), 
+            sd(final_df$floor_count), sd(final_df$age)) 
+# bring all together
+#names(table) <- c("Minimum","Maximum","Average", "Median","Standard Deviation")
+all = data.frame(Minimum,Maximum,Mean,Median,Sd)
+row.names(all)<-c("Temperature","Cloud Coverage","Dew Temperature","Sea Level","Wind Speed", "Meter Reading","Meter Type", "Building Type","Building Square Feet", "Building Floor","Building Age")
+all %>% 
+  knitr::kable(digits=3,align='c')%>% 
+  kable_styling()
+
+```
+
+### 2. Create a scatterplot among the variables to find potentially linear or curvilinear relationships. That should help you identify both a target variable and candidate predictor variables.  
+
+```{r,fig.width=10,fig.height=10}
+library(corrplot)
+pairs(final_df[,-c(1,7,9,10,11)])
+```
+
+# multiple regression
+```{r}
+sum(is.na(final_df$age))
+reg <- lm(avg_meter_reading ~. - building_id -meter - site_id, data = final_df_normalize)
+
+summary(reg)
+vif(reg)
+```
+
+## hierarchical clustering
+```{r}
+final_df_normalize1 <- final_df_normalize
+final_df_normalize1 <- final_df_normalize1[,-c(1,7,9,10,11)]
+```
+
+```{r}
+# compute normalized distance based on all variables
+d.norm1 <- dist(final_df_normalize1, method = "euclidean")  
+```
+
+```{r}
+# in hclust() set LINKAGE parameter to "ward.D", "single", "complete", "average", "median", or "centroid"
+hc1 <- hclust(d.norm1, method = "single")
+plot(hc1, hang = -1, ann = FALSE) 
+# Note: hang -1 means do not hang labels off the leaves; make them level; ann is for plot annotation
+
+hc2 <- hclust(d.norm1, method = "average")
+plot(hc2, hang = -1, ann = FALSE)
+
+hc3 <- hclust(d.norm1, method = "median")
+plot(hc3, hang = -1, ann = FALSE)
+
+hc4 <- hclust(d.norm1, method = "complete")
+plot(hc4, hang = -1, ann = FALSE)
+
+hc5 <- hclust(d.norm1, method = "centroid")
+plot(hc5, hang = -1, ann = FALSE)
+
+hc6 <- hclust(d.norm1, method = "ward.D")
+plot(hc6, hang = -1, ann = FALSE)
+```
+
+```{r}
+d.norm2 <- dist(final_df_normalize1, method = "maximum")  
+d.norm3 <- dist(final_df_normalize1, method = "manhattan")  
+d.norm4 <- dist(final_df_normalize1, method = "canberra") 
+d.norm5 <- dist(final_df_normalize1, method = "binary") 
+d.norm6 <- dist(final_df_normalize1, method = "minkowski") 
+```
+
+```{r}
+hc7 <- hclust(d.norm2, method = "ward.D")
+plot(hc7, hang = -1, ann = FALSE)
+hc8 <- hclust(d.norm3, method = "ward.D")
+plot(hc8, hang = -1, ann = FALSE)
+hc9 <- hclust(d.norm4, method = "ward.D")
+plot(hc9, hang = -1, ann = FALSE)
+hc10 <- hclust(d.norm5, method = "ward.D")
+plot(hc10, hang = -1, ann = FALSE)
+hc11 <- hclust(d.norm6, method = "ward.D")
+plot(hc11, hang = -1, ann = FALSE)
+```
+
+```{r}
+memb <- cutree(hc9, k = 3) 
+cat(memb)
+hist(memb)
+```
+
+
+```{r}
+heatmap(as.matrix(final_df_normalize1), Colv = NA, hclustfun = hclust, 
+        col=rev(paste("grey",1:99,sep="")))
+```
+
+```{r}
+final_df_normalize1['HierCluster'] <- memb
+mean_label <- final_df_normalize1 %>% group_by(HierCluster) %>% summarise_each(funs(mean))
+mean_label['statistics'] <- 'avg'
+max_label <- final_df_normalize1 %>% group_by(HierCluster) %>% summarise_each(funs(max))
+max_label['statistics'] <- 'max'
+min_label <- final_df_normalize1 %>% group_by(HierCluster) %>% summarise_each(funs(min))
+min_label['statistics'] <- 'min'
+final_label <- rbind(mean_label,max_label,min_label)
+```
+
+```{r}
+memb1 <- memb
+memb1[memb1 == 2] <- "Top"
+memb1[memb1 == 1] <- "medium"
+memb1[memb1 == 3] <- "small"
+row.names(final_df_normalize1) <- paste(memb1, ": ", row.names(final_df_normalize1), sep = "")
+row.names(final_df_normalize1)
+```
+
+## K-Means
+```{r}
+set.seed(1)
+final_df_normalize2 <- final_df_normalize[,-c(1,7,9,10,11)]
+final_df_normalize2
+
+#Elbow Method for finding the optimal number of clusters
+set.seed(123)
+# Compute and plot wss for k = 2 to k = 15.
+k.max <- 20
+data <- final_df_normalize2
+wss <- sapply(1:k.max, 
+              function(k){kmeans(data, k )$tot.withinss})
+wss
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+
+```{r}
+set.seed(123)
+km_final <- kmeans(final_df_normalize2, 3)
+
+# plot an empty scatter plot 
+plot(c(0), xaxt = 'n',xlab="", ylab = "", type = "l", ylim = c(min(km_final$centers), max(km_final$centers)), xlim = c(0, 9))
+# label x-axes 
+axis(1, at = c(1:9), labels = names(final_df_normalize2),par(las="2"))
+# plot centroids 
+for (i in c(1:3)) 
+  lines(km_final$centers[i,], lty = i, lwd = 2, col = ifelse(i %in% c(1,3), "black", "dark grey"))
+# name clusters 
+text(x = 0.5, y = km_final$centers[, 1], labels = paste("Cluster", c(1:3)))
+
+```
+
+```{r}
+final_df_normalize3 <- final_df_normalize2
+final_df_normalize3$kmeans <- km_final$cluster
+```
+
+```{r}
+final <- final_df_normalize3 %>% group_by(kmeans) %>%
+  summarise(temp = mean(avg_temp), cloud=mean(avg_cloud),dewtemp=mean(avg_dewtemp),sea=mean(avg_sea),wind=mean(avg_wind),meter=mean(avg_meter_reading),squarefeet=mean(square_feet),age=mean(age))
+
+final %>% 
+  knitr::kable(digits=3,align='c')%>% 
+  kable_styling()
+```
+```{r}
+a<- km_final$cluster
+a[a==1] <- "Large and Warm"
+a[a==2] <- "Small and Warm"
+a[a==3] <- "Small and Cold"
+final_df_normalize3$kmeans <- a
+```
+
+
+
+```{r}
+final_df_normalize3['HierCluster'] <- memb
+```
+
+
+
+## multiple regression
+```{r}
+# partition data
+set.seed(1)  # set seed for reproducing the partition
+final_df_normalize3$primary_use <- final_df_normalize$primary_use
+train.index <- sample(c(1:27340), 27340*0.6)  
+
+#Create and set aside the remaining 40% of the data, to be used after omitting unhelpful data points and unnecessary variables.
+train.df <- final_df_normalize3[train.index,]
+valid.df <- final_df_normalize3[-train.index,]
+```
+
+
+
+
+```{r}
+
+reg_kmeans_H <- lm(avg_meter_reading ~. - kmeans +factor(kmeans)     
+                   -HierCluster + factor(HierCluster) 
+                   + age*floor_count -avg_cloud - avg_sea -avg_wind, 
+                   data = train.df)
+
+summary(reg_kmeans_H)
+vif(reg_kmeans_H)
+```
+
+```{r}
+outlierTest(reg_kmeans_H)
+
+plot(reg_kmeans_H)
+
+reg_kmeans_H <- lm(avg_meter_reading ~. - kmeans      
+                   -HierCluster + factor(HierCluster) 
+                   + age*floor_count -avg_cloud - avg_sea -avg_wind, 
+                   data = train.df[-c(13783,13683),])
+
+summary(reg_kmeans_H)
+vif(reg_kmeans_H)
+```
+
+
+
+```{r}
+reg.train.predict <- predict(reg_kmeans_H, train.df, type = "response")
+train.residuals <- train.df$avg_meter_reading - reg.train.predict
+RMSEtrain <- sqrt(mean(train.residuals^2,na.rm=TRUE))
+
+reg.valid.predict <- predict(reg_kmeans_H, valid.df, type = "response")
+valid.residuals <- valid.df$avg_meter_reading - reg.valid.predict
+RMSEvalid <- sqrt(mean(valid.residuals^2,na.rm=TRUE))
+
+hist(valid.residuals, breaks = 25, xlab = "Residuals", main = "")
+
+data.frame(actual = valid.df$avg_meter_reading, predicted = reg.valid.predict)
+
+
+```
