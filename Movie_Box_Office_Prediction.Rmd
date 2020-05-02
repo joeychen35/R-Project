@@ -25,7 +25,7 @@ library(rpart)				        # Popular decision tree algorithm
 library(rattle)					# Fancy tree plot
 
 ```
-```
+
 
 # Read Datasets and removing duplicate datas
 ```{r, warning=FALSE, message=FALSE}
